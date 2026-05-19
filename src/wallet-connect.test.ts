@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createRemotePopupConnector,
   createSierpinskiProvider,
   getSierpinskiWindowProvider,
   installSierpinskiWindowProvider,
@@ -185,5 +186,89 @@ describe("wallet connect runtime", () => {
     expect(resolved).not.toBeNull();
     const accounts = await resolved!.request({ method: "sierpinski_requestAccounts" });
     expect(accounts).toEqual(["hisham.spc"]);
+  });
+
+  it("connects through remote popup and forwards request/response", async () => {
+    const listeners: Array<(event: { origin: string; data: unknown }) => void> = [];
+    const messages: unknown[] = [];
+    const timers = new Map<number, () => void>();
+    let timerSeq = 0;
+    const popup = {
+      closed: false,
+      postMessage: (data: unknown) => {
+        messages.push(data);
+      },
+      close: () => {
+        popup.closed = true;
+      },
+    };
+    const fakeWindow = {
+      open: () => popup,
+      addEventListener: (_type: "message", handler: (event: { origin: string; data: unknown }) => void) => {
+        listeners.push(handler);
+      },
+      removeEventListener: (_type: "message", handler: (event: { origin: string; data: unknown }) => void) => {
+        const i = listeners.indexOf(handler);
+        if (i >= 0) listeners.splice(i, 1);
+      },
+      setTimeout: (fn: () => void) => {
+        const id = ++timerSeq;
+        timers.set(id, fn);
+        return id;
+      },
+      clearTimeout: (id: number) => {
+        timers.delete(id);
+      },
+    };
+
+    const connector = createRemotePopupConnector({
+      walletUrl: "https://wallet.sierpinskichain.com/connect",
+      appOrigin: "https://app.sierpinskichain.com",
+      targetOrigin: "https://wallet.sierpinskichain.com",
+      globalWindow: fakeWindow,
+      timeoutMs: 5_000,
+    });
+
+    const connected = connector.connect();
+    expect(messages.length).toBe(1);
+    const init = messages[0] as { kind: string; bridgeId: string };
+    listeners[0]?.({
+      origin: "https://wallet.sierpinskichain.com",
+      data: { kind: "triwallet_popup_ready", bridgeId: init.bridgeId },
+    });
+    await connected;
+
+    const requestPromise = connector.request({ method: "sierpinski_requestAccounts" });
+    const req = messages[1] as { kind: string; bridgeId: string; requestId: string };
+    listeners[0]?.({
+      origin: "https://wallet.sierpinskichain.com",
+      data: {
+        kind: "triwallet_popup_response",
+        bridgeId: req.bridgeId,
+        requestId: req.requestId,
+        ok: true,
+        result: ["hisham.spc"],
+      },
+    });
+    const accounts = await requestPromise;
+    expect(accounts).toEqual(["hisham.spc"]);
+    expect(timers.size).toBe(0);
+  });
+
+  it("fails when popup is blocked", async () => {
+    const connector = createRemotePopupConnector({
+      walletUrl: "https://wallet.sierpinskichain.com/connect",
+      appOrigin: "https://app.sierpinskichain.com",
+      targetOrigin: "https://wallet.sierpinskichain.com",
+      globalWindow: {
+        open: () => null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+      },
+    });
+
+    await expect(connector.connect()).rejects.toThrow("Popup was blocked");
   });
 });

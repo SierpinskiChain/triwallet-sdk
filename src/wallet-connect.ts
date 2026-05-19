@@ -67,6 +67,45 @@ type SierpinskiGlobal = {
   sierpinski?: SierpinskiProvider;
 };
 
+type PopupMessageEnvelope = {
+  kind: string;
+  bridgeId: string;
+  requestId?: string;
+  ok?: boolean;
+  result?: unknown;
+  error?: string;
+};
+
+type RemotePopupWindow = {
+  closed: boolean;
+  postMessage: (message: unknown, targetOrigin?: string) => void;
+  close: () => void;
+};
+
+type RemotePopupGlobalWindow = {
+  open: (url: string, target: string, features: string) => RemotePopupWindow | null;
+  addEventListener: (type: "message", handler: (event: { origin: string; data: unknown }) => void) => void;
+  removeEventListener: (type: "message", handler: (event: { origin: string; data: unknown }) => void) => void;
+  setTimeout: (handler: () => void, timeoutMs: number) => number;
+  clearTimeout: (id: number) => void;
+};
+
+export type RemotePopupConnectorConfig = {
+  walletUrl: string;
+  appOrigin: string;
+  targetOrigin: string;
+  timeoutMs?: number;
+  popupTarget?: string;
+  popupFeatures?: string;
+  globalWindow?: RemotePopupGlobalWindow;
+};
+
+export type RemotePopupConnector = {
+  connect: () => Promise<void>;
+  request: (request: SierpinskiProviderRequest) => Promise<unknown>;
+  disconnect: () => void;
+};
+
 export type WalletConnector = {
   connect: (request: ConnectorConnectRequest) => void;
   disconnect: (origin: string, nowMs: number) => void;
@@ -338,6 +377,142 @@ export function getSierpinskiWindowProvider(
     return source.sierpinski;
   }
   return null;
+}
+
+export function createRemotePopupConnector(config: RemotePopupConnectorConfig): RemotePopupConnector {
+  const timeoutMs = Number.isFinite(config.timeoutMs) && (config.timeoutMs ?? 0) > 0 ? (config.timeoutMs as number) : 45_000;
+  const popupTarget = config.popupTarget ?? "triwallet_connect_popup";
+  const popupFeatures = config.popupFeatures ?? "popup,width=420,height=720,noopener,noreferrer";
+  const bridgeId = `tri_bridge_${Math.random().toString(36).slice(2, 12)}`;
+  const globalWindow = config.globalWindow ?? (globalThis as unknown as RemotePopupGlobalWindow);
+  const normalizedTargetOrigin = canonicalOrigin(config.targetOrigin);
+  if (!normalizedTargetOrigin) {
+    throw new Error("Invalid popup target origin");
+  }
+  if (!canonicalOrigin(config.appOrigin)) {
+    throw new Error("Invalid app origin");
+  }
+
+  let popupRef: RemotePopupWindow | null = null;
+  let connected = false;
+  let requestSeq = 0;
+  let listenerAttached = false;
+  const pending = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timeoutId: number;
+    }
+  >();
+
+  const onMessage = (event: { origin: string; data: unknown }): void => {
+    if (event.origin !== normalizedTargetOrigin) {
+      return;
+    }
+    const data = event.data as PopupMessageEnvelope;
+    if (!data || typeof data !== "object" || data.bridgeId !== bridgeId || typeof data.kind !== "string") {
+      return;
+    }
+    if (data.kind === "triwallet_popup_ready") {
+      connected = true;
+      const ready = pending.get("connect");
+      if (ready) {
+        globalWindow.clearTimeout(ready.timeoutId);
+        pending.delete("connect");
+        ready.resolve(undefined);
+      }
+      return;
+    }
+    if (data.kind !== "triwallet_popup_response" || typeof data.requestId !== "string") {
+      return;
+    }
+    const entry = pending.get(data.requestId);
+    if (!entry) return;
+    globalWindow.clearTimeout(entry.timeoutId);
+    pending.delete(data.requestId);
+    if (data.ok === true) {
+      entry.resolve(data.result);
+      return;
+    }
+    entry.reject(new Error(typeof data.error === "string" ? data.error : "Popup request failed"));
+  };
+
+  const ensureListener = (): void => {
+    if (listenerAttached) return;
+    globalWindow.addEventListener("message", onMessage);
+    listenerAttached = true;
+  };
+
+  const ensurePopup = (): void => {
+    if (popupRef && !popupRef.closed) return;
+    popupRef = globalWindow.open(config.walletUrl, popupTarget, popupFeatures);
+    if (!popupRef) {
+      throw new Error("Popup was blocked");
+    }
+  };
+
+  const requestWithTimeout = (requestId: string): Promise<unknown> =>
+    new Promise((resolve, reject) => {
+      const timeoutId = globalWindow.setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error(requestId === "connect" ? "Popup connection timed out" : "Popup request timed out"));
+      }, timeoutMs);
+      pending.set(requestId, { resolve, reject, timeoutId });
+    });
+
+  const connector: RemotePopupConnector = {
+    connect: async (): Promise<void> => {
+      if (connected) return;
+      ensurePopup();
+      ensureListener();
+      const readyPromise = requestWithTimeout("connect");
+      popupRef!.postMessage(
+        {
+          kind: "triwallet_popup_connect",
+          bridgeId,
+          appOrigin: config.appOrigin,
+        },
+        normalizedTargetOrigin,
+      );
+      await readyPromise;
+    },
+    request: async (request: SierpinskiProviderRequest): Promise<unknown> => {
+      if (!connected) {
+        await connector.connect();
+      }
+      ensurePopup();
+      const requestId = `req_${++requestSeq}`;
+      const response = requestWithTimeout(requestId);
+      popupRef!.postMessage(
+        {
+          kind: "triwallet_popup_request",
+          bridgeId,
+          requestId,
+          request,
+        },
+        normalizedTargetOrigin,
+      );
+      return response;
+    },
+    disconnect: (): void => {
+      connected = false;
+      for (const entry of pending.values()) {
+        globalWindow.clearTimeout(entry.timeoutId);
+        entry.reject(new Error("Popup connector disconnected"));
+      }
+      pending.clear();
+      if (listenerAttached) {
+        globalWindow.removeEventListener("message", onMessage);
+        listenerAttached = false;
+      }
+      if (popupRef && !popupRef.closed) {
+        popupRef.close();
+      }
+      popupRef = null;
+    },
+  };
+  return connector;
 }
 
 export type { QueueDecision, SignedDecision };

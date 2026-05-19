@@ -21,10 +21,19 @@ npm install @sierpinskichain/triwallet-sdk
 
 ```ts
 import {
+  createRemotePopupConnector,
   getSierpinskiWindowProvider,
   validateWalletRequest,
 } from "@sierpinskichain/triwallet-sdk";
 
 const provider = getSierpinskiWindowProvider();
 const accounts = await provider?.request({ method: "sierpinski_requestAccounts" });
+
+const popup = createRemotePopupConnector({
+  walletUrl: "https://wallet.sierpinskichain.com/connect",
+  appOrigin: window.location.origin,
+  targetOrigin: "https://wallet.sierpinskichain.com",
+});
+await popup.connect();
+const remoteAccounts = await popup.request({ method: "sierpinski_requestAccounts" });
 ```
