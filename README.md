@@ -30,10 +30,13 @@ const provider = getSierpinskiWindowProvider();
 const accounts = await provider?.request({ method: "sierpinski_requestAccounts" });
 
 const popup = createRemotePopupConnector({
-  walletUrl: "https://wallet.sierpinskichain.com/connect",
+  walletUrl: "https://wallet.sierpinskichain.com/popup",
   appOrigin: window.location.origin,
   targetOrigin: "https://wallet.sierpinskichain.com",
 });
 await popup.connect();
 const remoteAccounts = await popup.request({ method: "sierpinski_requestAccounts" });
+
+// If walletUrl is omitted (or root origin), the connector defaults to `/popup`.
+// Connect handshake retries until ready (or timeout) to avoid first-message race on slow popup loads.
 ```

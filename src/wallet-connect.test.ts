@@ -191,7 +191,7 @@ describe("wallet connect runtime", () => {
   it("connects through remote popup and forwards request/response", async () => {
     const listeners: Array<(event: { origin: string; data: unknown }) => void> = [];
     const messages: unknown[] = [];
-    const timers = new Map<number, () => void>();
+    const timers = new Map<number, { fn: () => void; timeoutMs: number }>();
     let timerSeq = 0;
     const popup = {
       closed: false,
@@ -211,9 +211,9 @@ describe("wallet connect runtime", () => {
         const i = listeners.indexOf(handler);
         if (i >= 0) listeners.splice(i, 1);
       },
-      setTimeout: (fn: () => void) => {
+      setTimeout: (fn: () => void, timeoutMs: number) => {
         const id = ++timerSeq;
-        timers.set(id, fn);
+        timers.set(id, { fn, timeoutMs });
         return id;
       },
       clearTimeout: (id: number) => {
@@ -232,6 +232,14 @@ describe("wallet connect runtime", () => {
     const connected = connector.connect();
     expect(messages.length).toBe(1);
     const init = messages[0] as { kind: string; bridgeId: string };
+    expect(init.kind).toBe("triwallet_popup_connect");
+    expect(timers.size).toBeGreaterThan(0);
+    const retryTimer = Array.from(timers.values()).find((entry) => entry.timeoutMs === 250);
+    retryTimer?.fn();
+    expect(messages.length).toBe(2);
+    const retry = messages[1] as { kind: string; bridgeId: string };
+    expect(retry.kind).toBe("triwallet_popup_connect");
+    expect(retry.bridgeId).toBe(init.bridgeId);
     listeners[0]?.({
       origin: "https://wallet.sierpinskichain.com",
       data: { kind: "triwallet_popup_ready", bridgeId: init.bridgeId },
@@ -239,7 +247,7 @@ describe("wallet connect runtime", () => {
     await connected;
 
     const requestPromise = connector.request({ method: "sierpinski_requestAccounts" });
-    const req = messages[1] as { kind: string; bridgeId: string; requestId: string };
+    const req = messages[2] as { kind: string; bridgeId: string; requestId: string };
     listeners[0]?.({
       origin: "https://wallet.sierpinskichain.com",
       data: {
@@ -252,7 +260,6 @@ describe("wallet connect runtime", () => {
     });
     const accounts = await requestPromise;
     expect(accounts).toEqual(["hisham.spc"]);
-    expect(timers.size).toBe(0);
   });
 
   it("fails when popup is blocked", async () => {

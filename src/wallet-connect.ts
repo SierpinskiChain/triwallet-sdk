@@ -409,6 +409,7 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
   let connected = false;
   let requestSeq = 0;
   let listenerAttached = false;
+  let connectRetryTimeoutId: number | null = null;
   const pending = new Map<
     string,
     {
@@ -428,6 +429,10 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
     }
     if (data.kind === "triwallet_popup_ready") {
       connected = true;
+      if (connectRetryTimeoutId !== null) {
+        globalWindow.clearTimeout(connectRetryTimeoutId);
+        connectRetryTimeoutId = null;
+      }
       const ready = pending.get("connect");
       if (ready) {
         globalWindow.clearTimeout(ready.timeoutId);
@@ -467,11 +472,30 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
   const requestWithTimeout = (requestId: string): Promise<unknown> =>
     new Promise((resolve, reject) => {
       const timeoutId = globalWindow.setTimeout(() => {
+        if (requestId === "connect" && connectRetryTimeoutId !== null) {
+          globalWindow.clearTimeout(connectRetryTimeoutId);
+          connectRetryTimeoutId = null;
+        }
         pending.delete(requestId);
         reject(new Error(requestId === "connect" ? "Popup connection timed out" : "Popup request timed out"));
       }, timeoutMs);
       pending.set(requestId, { resolve, reject, timeoutId });
     });
+
+  const postConnectHandshake = (): void => {
+    if (!popupRef || popupRef.closed || connected || !pending.has("connect")) {
+      return;
+    }
+    popupRef.postMessage(
+      {
+        kind: "triwallet_popup_connect",
+        bridgeId,
+        appOrigin: config.appOrigin,
+      },
+      normalizedTargetOrigin,
+    );
+    connectRetryTimeoutId = globalWindow.setTimeout(postConnectHandshake, 250);
+  };
 
   const connector: RemotePopupConnector = {
     connect: async (): Promise<void> => {
@@ -479,15 +503,15 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
       ensurePopup();
       ensureListener();
       const readyPromise = requestWithTimeout("connect");
-      popupRef!.postMessage(
-        {
-          kind: "triwallet_popup_connect",
-          bridgeId,
-          appOrigin: config.appOrigin,
-        },
-        normalizedTargetOrigin,
-      );
-      await readyPromise;
+      postConnectHandshake();
+      try {
+        await readyPromise;
+      } finally {
+        if (connectRetryTimeoutId !== null) {
+          globalWindow.clearTimeout(connectRetryTimeoutId);
+          connectRetryTimeoutId = null;
+        }
+      }
     },
     request: async (request: SierpinskiProviderRequest): Promise<unknown> => {
       if (!connected) {
@@ -517,6 +541,10 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
       if (listenerAttached) {
         globalWindow.removeEventListener("message", onMessage);
         listenerAttached = false;
+      }
+      if (connectRetryTimeoutId !== null) {
+        globalWindow.clearTimeout(connectRetryTimeoutId);
+        connectRetryTimeoutId = null;
       }
       if (popupRef && !popupRef.closed) {
         popupRef.close();
