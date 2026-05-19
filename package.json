@@ -19,6 +19,7 @@
     "src/tx-decode-sim.ts",
     "src/wallet-request.ts",
     "src/wallet-vault.ts",
+    "src/wallet-connect.ts",
     "README.md"
   ],
   "scripts": {

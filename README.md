@@ -9,6 +9,7 @@ TriWallet runtime SDK for:
 - transaction decode/simulation
 - network/account profile runtime helpers
 - encrypted mnemonic vault helpers
+- wallet-connect style connect/disconnect and delegated signing
 
 ## Install
 
@@ -19,5 +20,12 @@ npm install @sierpinskichain/triwallet-sdk
 ## Usage
 
 ```ts
-import { validateWalletRequest, createApprovalQueue, runSecurityPack } from "@sierpinskichain/triwallet-sdk";
+import {
+  createWalletConnector,
+  signWithConnector,
+  submitDelegatedTransaction,
+  validateWalletRequest,
+  createApprovalQueue,
+  runSecurityPack,
+} from "@sierpinskichain/triwallet-sdk";
 ```

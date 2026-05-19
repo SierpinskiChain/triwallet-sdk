@@ -6,3 +6,4 @@ export * from "./session-runtime";
 export * from "./tx-decode-sim";
 export * from "./wallet-request";
 export * from "./wallet-vault";
+export * from "./wallet-connect";
