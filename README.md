@@ -21,11 +21,10 @@ npm install @sierpinskichain/triwallet-sdk
 
 ```ts
 import {
-  createWalletConnector,
-  signWithConnector,
-  submitDelegatedTransaction,
+  getSierpinskiWindowProvider,
   validateWalletRequest,
-  createApprovalQueue,
-  runSecurityPack,
 } from "@sierpinskichain/triwallet-sdk";
+
+const provider = getSierpinskiWindowProvider();
+const accounts = await provider?.request({ method: "sierpinski_requestAccounts" });
 ```

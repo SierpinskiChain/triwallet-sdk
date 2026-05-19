@@ -35,6 +35,38 @@ export type ConnectorSignRequest = {
   decidedAtMs: number;
 };
 
+export type SierpinskiProviderRequest =
+  | { method: "sierpinski_requestAccounts"; params?: undefined }
+  | {
+      method: "sierpinski_signMessage";
+      params: {
+        message: string;
+        chainId: string;
+        nonce: string;
+        requestId: string;
+        decidedAtMs?: number;
+      };
+    }
+  | {
+      method: "sierpinski_sendTransaction";
+      params: {
+        chainId: string;
+        nonce: string;
+        requestId: string;
+        transaction: Record<string, unknown>;
+        decidedAtMs?: number;
+      };
+    }
+  | { method: "sierpinski_disconnect"; params?: undefined };
+
+export type SierpinskiProvider = {
+  request: (request: SierpinskiProviderRequest) => Promise<unknown>;
+};
+
+type SierpinskiGlobal = {
+  sierpinski?: SierpinskiProvider;
+};
+
 export type WalletConnector = {
   connect: (request: ConnectorConnectRequest) => void;
   disconnect: (origin: string, nowMs: number) => void;
@@ -223,6 +255,89 @@ export function submitDelegatedTransaction(
 
 export function verifyConnectorSignature(connector: WalletConnector, signed: SignedDecision): boolean {
   return verifyBackgroundSignature(signed, connector.signerSecret);
+}
+
+export function createSierpinskiProvider(
+  connector: WalletConnector,
+  origin: string,
+  now: () => number = () => Date.now(),
+): SierpinskiProvider {
+  const ensureConnected = (timestampMs: number): void => {
+    if (!connector.isConnected(origin)) {
+      connector.connect({
+        origin,
+        exposeAccounts: [connector.signerAddress],
+        permissions: ["request_signature", "send_transaction"],
+        nowMs: timestampMs,
+      });
+    }
+  };
+
+  return {
+    request: async (request: SierpinskiProviderRequest): Promise<unknown> => {
+      if (request.method === "sierpinski_requestAccounts") {
+        const at = now();
+        ensureConnected(at);
+        return [connector.signerAddress];
+      }
+      if (request.method === "sierpinski_disconnect") {
+        connector.disconnect(origin, now());
+        return true;
+      }
+      if (request.method === "sierpinski_signMessage") {
+        const at = request.params.decidedAtMs ?? now();
+        ensureConnected(at);
+        return signWithConnector(connector, {
+          origin,
+          chainId: request.params.chainId,
+          method: "sierpinski_signMessage",
+          nonce: request.params.nonce,
+          requestId: request.params.requestId,
+          payload: { message: request.params.message },
+          decidedAtMs: at,
+        });
+      }
+      if (request.method === "sierpinski_sendTransaction") {
+        const at = request.params.decidedAtMs ?? now();
+        ensureConnected(at);
+        const tx = request.params.transaction;
+        const from =
+          typeof tx.from === "string" && tx.from.trim().length > 0 ? tx.from : connector.signerAddress;
+        return submitDelegatedTransaction(connector, {
+          origin,
+          chainId: request.params.chainId,
+          method: "sierpinski_sendTransaction",
+          nonce: request.params.nonce,
+          requestId: request.params.requestId,
+          payload: {
+            ...tx,
+            from,
+          },
+          decidedAtMs: at,
+        });
+      }
+      throw new Error("unsupported sierpinski provider method");
+    },
+  };
+}
+
+export function installSierpinskiWindowProvider(
+  connector: WalletConnector,
+  origin: string,
+  target: SierpinskiGlobal = globalThis as SierpinskiGlobal,
+): SierpinskiProvider {
+  const provider = createSierpinskiProvider(connector, origin);
+  target.sierpinski = provider;
+  return provider;
+}
+
+export function getSierpinskiWindowProvider(
+  source: SierpinskiGlobal = globalThis as SierpinskiGlobal,
+): SierpinskiProvider | null {
+  if (source && source.sierpinski && typeof source.sierpinski.request === "function") {
+    return source.sierpinski;
+  }
+  return null;
 }
 
 export type { QueueDecision, SignedDecision };

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createSierpinskiProvider,
+  getSierpinskiWindowProvider,
+  installSierpinskiWindowProvider,
   createWalletConnector,
+  type SignedDecision,
   signWithConnector,
   submitDelegatedTransaction,
   verifyConnectorSignature,
@@ -107,5 +111,79 @@ describe("wallet connect runtime", () => {
     expect(signedTx.status).toBe("approved");
     expect(signedTx.signature).toBeDefined();
     expect(verifyConnectorSignature(connector, signedTx)).toBe(true);
+  });
+
+  it("supports sierpinski_requestAccounts via provider runtime", async () => {
+    const connector = createWalletConnector({
+      walletAccounts: ["hisham.spc", "ops.spc"],
+      signerAddress: "hisham.spc",
+      signerSecret: "secret",
+    });
+    const provider = createSierpinskiProvider(connector, "https://market.sierpinskichain.com");
+
+    const accounts = await provider.request({ method: "sierpinski_requestAccounts" });
+    expect(accounts).toEqual(["hisham.spc"]);
+    expect(connector.isConnected("https://market.sierpinskichain.com")).toBe(true);
+  });
+
+  it("supports sierpinski_signMessage via provider runtime", async () => {
+    const connector = createWalletConnector({
+      walletAccounts: ["hisham.spc"],
+      signerAddress: "hisham.spc",
+      signerSecret: "secret",
+    });
+    const provider = createSierpinskiProvider(connector, "https://market.sierpinskichain.com");
+
+    const signed = await provider.request({
+      method: "sierpinski_signMessage",
+      params: { message: "hello", chainId: "sierpinski-testnet-1", nonce: "n-1", requestId: "req-sign-2" },
+    });
+    expect(typeof signed).toBe("object");
+    const signedDecision = signed as SignedDecision;
+    expect(signedDecision.status).toBe("approved");
+    expect(verifyConnectorSignature(connector, signedDecision)).toBe(true);
+  });
+
+  it("supports sierpinski_sendTransaction and disconnect via provider runtime", async () => {
+    const connector = createWalletConnector({
+      walletAccounts: ["hisham.spc"],
+      signerAddress: "hisham.spc",
+      signerSecret: "secret",
+    });
+    const provider = createSierpinskiProvider(connector, "https://market.sierpinskichain.com");
+
+    const signedTx = await provider.request({
+      method: "sierpinski_sendTransaction",
+      params: {
+        chainId: "sierpinski-testnet-1",
+        nonce: "tx-2",
+        requestId: "req-tx-2",
+        transaction: { to: "ops.spc", amount: "3", asset: "SPC" },
+      },
+    });
+    expect(typeof signedTx).toBe("object");
+    const signedTxDecision = signedTx as SignedDecision;
+    expect(signedTxDecision.status).toBe("approved");
+    expect(verifyConnectorSignature(connector, signedTxDecision)).toBe(true);
+
+    const disconnected = await provider.request({ method: "sierpinski_disconnect" });
+    expect(disconnected).toBe(true);
+    expect(connector.isConnected("https://market.sierpinskichain.com")).toBe(false);
+  });
+
+  it("installs and resolves window.sierpinski provider", async () => {
+    const connector = createWalletConnector({
+      walletAccounts: ["hisham.spc"],
+      signerAddress: "hisham.spc",
+      signerSecret: "secret",
+    });
+    const globalLike = {} as { sierpinski?: ReturnType<typeof createSierpinskiProvider> };
+    const installed = installSierpinskiWindowProvider(connector, "https://market.sierpinskichain.com", globalLike);
+    expect(globalLike.sierpinski).toBe(installed);
+
+    const resolved = getSierpinskiWindowProvider(globalLike);
+    expect(resolved).not.toBeNull();
+    const accounts = await resolved!.request({ method: "sierpinski_requestAccounts" });
+    expect(accounts).toEqual(["hisham.spc"]);
   });
 });
