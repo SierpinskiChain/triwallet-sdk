@@ -13,11 +13,11 @@ TriWallet runtime SDK for:
 ## Install
 
 ```bash
-npm install @sierpinskichain/triwallet-sdk
+npm install @oneofdafew/triwallet-sdk
 ```
 
 ## Usage
 
 ```ts
-import { validateWalletRequest, createApprovalQueue, runSecurityPack } from "@sierpinskichain/triwallet-sdk";
+import { validateWalletRequest, createApprovalQueue, runSecurityPack } from "@oneofdafew/triwallet-sdk";
 ```
