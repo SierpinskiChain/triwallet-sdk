@@ -13,7 +13,6 @@ import {
   connectDapp,
   createPermissionsState,
   revokeOrigin,
-  type DappPermissionRequest,
   type PermissionsState,
 } from "./dapp-permissions";
 
@@ -103,7 +102,7 @@ export function createWalletConnector(config: WalletConnectorConfig): WalletConn
   let queue = createApprovalQueue();
 
   const connector: WalletConnector = {
-    connect: (request: DappPermissionRequest) => {
+    connect: (request: ConnectorConnectRequest) => {
       permissions = connectDapp(permissions, {
         origin: request.origin,
         walletAccounts: config.walletAccounts,
