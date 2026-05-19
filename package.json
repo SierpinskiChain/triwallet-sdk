@@ -43,5 +43,9 @@
     "sdk",
     "security"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SierpinskiChain/triwallet-sdk"
+  }
 }
