@@ -30,9 +30,9 @@ const provider = getSierpinskiWindowProvider();
 const accounts = await provider?.request({ method: "sierpinski_requestAccounts" });
 
 const popup = createRemotePopupConnector({
-  walletUrl: "https://wallet.sierpinskichain.com/popup",
+  walletUrl: "https://triwallet.org/popup",
   appOrigin: window.location.origin,
-  targetOrigin: "https://wallet.sierpinskichain.com",
+  targetOrigin: "https://triwallet.org",
 });
 await popup.connect();
 const remoteAccounts = await popup.request({ method: "sierpinski_requestAccounts" });
