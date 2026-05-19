@@ -271,4 +271,40 @@ describe("wallet connect runtime", () => {
 
     await expect(connector.connect()).rejects.toThrow("Popup was blocked");
   });
+
+  it("defaults popup path to /popup when walletUrl is omitted or root", async () => {
+    const opened: string[] = [];
+    const listeners: Array<(event: { origin: string; data: unknown }) => void> = [];
+    const out: unknown[] = [];
+    const popup = {
+      closed: false,
+      postMessage: (d: unknown) => out.push(d),
+      close: () => {},
+    };
+
+    const connector = createRemotePopupConnector({
+      appOrigin: "https://app.sierpinskichain.com",
+      targetOrigin: "https://wallet.sierpinskichain.com",
+      walletUrl: "https://wallet.sierpinskichain.com",
+      globalWindow: {
+        open: (url: string) => {
+          opened.push(url);
+          return popup;
+        },
+        addEventListener: (_: "message", h: (event: { origin: string; data: unknown }) => void) => listeners.push(h),
+        removeEventListener: () => {},
+        setTimeout: () => 1,
+        clearTimeout: () => {},
+      },
+    });
+
+    const connecting = connector.connect();
+    expect(opened[0]).toBe("https://wallet.sierpinskichain.com/popup");
+    const msg = out[0] as { bridgeId: string };
+    listeners[0]?.({
+      origin: "https://wallet.sierpinskichain.com",
+      data: { kind: "triwallet_popup_ready", bridgeId: msg.bridgeId },
+    });
+    await connecting;
+  });
 });

@@ -91,7 +91,7 @@ type RemotePopupGlobalWindow = {
 };
 
 export type RemotePopupConnectorConfig = {
-  walletUrl: string;
+  walletUrl?: string;
   appOrigin: string;
   targetOrigin: string;
   timeoutMs?: number;
@@ -392,6 +392,18 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
   if (!canonicalOrigin(config.appOrigin)) {
     throw new Error("Invalid app origin");
   }
+  const resolveWalletUrl = (): string => {
+    const source = config.walletUrl && config.walletUrl.trim().length > 0 ? config.walletUrl : normalizedTargetOrigin;
+    const url = new URL(source);
+    // Default to dedicated approval page when caller passes only origin/root.
+    if (url.pathname === "/" || url.pathname.trim().length === 0) {
+      url.pathname = "/popup";
+      url.search = "";
+      url.hash = "";
+    }
+    return url.toString();
+  };
+  const popupUrl = resolveWalletUrl();
 
   let popupRef: RemotePopupWindow | null = null;
   let connected = false;
@@ -446,7 +458,7 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
 
   const ensurePopup = (): void => {
     if (popupRef && !popupRef.closed) return;
-    popupRef = globalWindow.open(config.walletUrl, popupTarget, popupFeatures);
+    popupRef = globalWindow.open(popupUrl, popupTarget, popupFeatures);
     if (!popupRef) {
       throw new Error("Popup was blocked");
     }
