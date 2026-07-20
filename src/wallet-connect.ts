@@ -463,6 +463,8 @@ export function createRemotePopupConnector(config: RemotePopupConnectorConfig): 
 
   const ensurePopup = (): void => {
     if (popupRef && !popupRef.closed) return;
+    // Popup was closed — need to re-handshake
+    connected = false;
     popupRef = globalWindow.open(popupUrl, popupTarget, popupFeatures);
     if (!popupRef) {
       throw new Error("Popup was blocked");

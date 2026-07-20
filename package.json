@@ -1,6 +1,6 @@
 {
   "name": "@sierpinskichain/triwallet-sdk",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "TriWallet client runtime SDK for request validation, approvals, permissions, session security, and vault operations",
   "type": "module",
   "main": "./src/index.ts",
