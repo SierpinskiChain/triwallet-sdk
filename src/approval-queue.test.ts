@@ -60,7 +60,7 @@ describe("approval queue", () => {
     state = enqueueRequest(state, {
       ...requestA,
       requestId: "req_bad_origin",
-      origin: "http://localhost:3000",
+      origin: "http://evil-phisher.example",
     });
     expect(state.pending.length).toBe(0);
 

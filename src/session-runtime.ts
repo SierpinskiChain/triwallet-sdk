@@ -162,6 +162,9 @@ export function isTrustedRequestOrigin(origin: string): boolean {
   try {
     const parsed = new URL(origin);
     if (parsed.protocol !== "https:") {
+      if (parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1")) {
+        return true;
+      }
       return false;
     }
     return !isDisallowedHost(parsed.hostname);

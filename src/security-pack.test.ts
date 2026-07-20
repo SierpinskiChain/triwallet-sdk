@@ -4,7 +4,7 @@ import { runSecurityPack } from "./security-pack";
 describe("triwallet security pack", () => {
   it("flags phishing for non-https/local origins", () => {
     const report = runSecurityPack({
-      requestOrigin: "http://localhost:3000",
+      requestOrigin: "http://evil-phisher.example",
       requestId: "req_1",
       chainId: "sierpinski-testnet-1",
       method: "sendTransaction",

@@ -60,7 +60,7 @@ describe("dapp permissions", () => {
   it("ignores revoke requests with untrusted or oversized origin", () => {
     let state = connectDapp(createPermissionsState(), request);
     const beforeAuditLen = state.auditTrail.length;
-    state = revokeOrigin(state, "http://localhost:3000", request.nowMs + 1);
+    state = revokeOrigin(state, "http://evil-phisher.example", request.nowMs + 1);
     expect(state.byOrigin[request.origin]).toBeDefined();
     expect(state.auditTrail.length).toBe(beforeAuditLen);
 
@@ -86,12 +86,12 @@ describe("dapp permissions", () => {
   });
 
   it("rejects untrusted origins for consent creation", () => {
-    const state = connectDapp(createPermissionsState(), {
-      ...request,
-      origin: "http://localhost:3000",
-    });
-    expect(state.byOrigin["http://localhost:3000"]).toBeUndefined();
-    expect(state.auditTrail[state.auditTrail.length - 1]?.action).toBe("reject_untrusted_origin");
+  const state = connectDapp(createPermissionsState(), {
+    ...request,
+    origin: "http://evil-phisher.example",
+  });
+  expect(state.byOrigin["http://evil-phisher.example"]).toBeUndefined();
+  expect(state.auditTrail[state.auditTrail.length - 1]?.action).toBe("reject_untrusted_origin");
   });
 
   it("does not trust caller-supplied accounts outside wallet accounts", () => {
@@ -233,14 +233,14 @@ describe("dapp permissions", () => {
   it("normalizes malformed reject-audit origin strings to canonical trim-stable form", () => {
     const malformed = connectDapp(createPermissionsState(), {
       ...request,
-      origin: "  http://localhost:3000  ",
+      origin: "  http://evil-phisher.example  ",
     });
     expect(malformed.byOrigin[request.origin]).toBeUndefined();
     expect(malformed.auditTrail[malformed.auditTrail.length - 1]?.action).toBe(
       "reject_untrusted_origin",
     );
     expect(malformed.auditTrail[malformed.auditTrail.length - 1]?.origin).toBe(
-      "http://localhost:3000",
+      "http://evil-phisher.example",
     );
   });
 
