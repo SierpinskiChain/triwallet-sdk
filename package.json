@@ -1,0 +1,65 @@
+{
+  "name": "@sierpinskichain/triwallet-sdk",
+  "version": "0.1.0",
+  "description": "TriWallet connector SDK — popup-based dApp wallet integration for the Sierpinski ecosystem",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./react": {
+      "types": "./dist/types/react.d.ts",
+      "import": "./dist/esm/react.js",
+      "require": "./dist/cjs/react.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build:esm": "tsc -p tsconfig.build.esm.json",
+    "build:cjs": "tsc -p tsconfig.build.cjs.json",
+    "build:types": "tsc -p tsconfig.build.types.json",
+    "build:cjs-meta": "mkdir -p dist/cjs && printf '{\"type\":\"commonjs\"}\\n' > dist/cjs/package.json",
+    "build": "bun run clean && bun run build:esm && bun run build:cjs && bun run build:types && bun run build:cjs-meta",
+    "dev:sync": "bun run build && npm pack && cp sierpinskichain-triwallet-sdk-*.tgz ../../apps/banking/ && cp sierpinskichain-triwallet-sdk-*.tgz ../../apps/mymesra/ && echo 'Done. Run: cd apps/banking && bun install && cd apps/mymesra && bun install'",
+    "prepublishOnly": "bun run typecheck && bun run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "sierpinski",
+    "triwallet",
+    "wallet",
+    "dapp",
+    "web3",
+    "blockchain"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SierpinskiChain/triwallet-sdk"
+  },
+  "license": "MIT"
+}
